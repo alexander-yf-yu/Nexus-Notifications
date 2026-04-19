@@ -25,8 +25,10 @@ log = logging.getLogger("nexus")
 class Config:
     location_id: int
     current_appt: datetime
-    pushover_token: str
-    pushover_user: str
+    twilio_sid: str
+    twilio_token: str
+    twilio_from: str
+    twilio_to: str
     poll_interval_s: int
     state_path: Path
 
@@ -42,8 +44,10 @@ def load_config() -> Config:
     return Config(
         location_id=int(os.environ["LOCATION_ID"]),
         current_appt=current_appt,
-        pushover_token=os.environ["PUSHOVER_TOKEN"],
-        pushover_user=os.environ["PUSHOVER_USER"],
+        twilio_sid=os.environ["TWILIO_ACCOUNT_SID"],
+        twilio_token=os.environ["TWILIO_AUTH_TOKEN"],
+        twilio_from=os.environ["TWILIO_FROM"],
+        twilio_to=os.environ["TWILIO_TO"],
         poll_interval_s=int(os.environ.get("POLL_INTERVAL_S", "120")),
         state_path=Path(os.environ.get("STATE_PATH", "state.json")),
     )
@@ -97,10 +101,11 @@ def save_known(path: Path, known: set[str]) -> None:
     path.write_text(json.dumps(sorted(known)))
 
 
-def notify_pushover(token: str, user: str, title: str, message: str) -> None:
+def notify_sms(cfg: Config, body: str) -> None:
     r = requests.post(
-        "https://api.pushover.net/1/messages.json",
-        data={"token": token, "user": user, "title": title, "message": message, "priority": 1},
+        f"https://api.twilio.com/2010-04-01/Accounts/{cfg.twilio_sid}/Messages.json",
+        auth=(cfg.twilio_sid, cfg.twilio_token),
+        data={"From": cfg.twilio_from, "To": cfg.twilio_to, "Body": body},
         timeout=10,
     )
     r.raise_for_status()
@@ -118,9 +123,9 @@ def run_poll(cfg: Config) -> None:
             if new_keys:
                 new_sorted = sorted(new_keys)
                 log.info("Found %d new earlier slot(s): %s", len(new_sorted), new_sorted)
-                msg = "Earlier NEXUS slot(s) open at Blaine:\n" + "\n".join(new_sorted)
-                msg += f"\n\nBook: https://ttp.cbp.dhs.gov/schedulerui/schedule-interview/location?lang=en&vo=true&returnUrl=ttp-external&service=nexus"
-                notify_pushover(cfg.pushover_token, cfg.pushover_user, "NEXUS slot available", msg)
+                preview = ", ".join(new_sorted[:3]) + (f" (+{len(new_sorted) - 3} more)" if len(new_sorted) > 3 else "")
+                body = f"NEXUS slot open: {preview}. Book: https://ttp.cbp.dhs.gov/schedulerui/"
+                notify_sms(cfg, body)
                 known |= new_keys
                 save_known(cfg.state_path, known)
             else:
