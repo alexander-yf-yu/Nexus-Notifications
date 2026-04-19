@@ -1,0 +1,8 @@
+services:
+  nexus-notifier:
+    build: .
+    container_name: nexus-notifier
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
