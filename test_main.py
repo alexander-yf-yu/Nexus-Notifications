@@ -7,8 +7,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
-from main import Config, earlier_slots, filter_by_day_and_date, load_known, parse_slot_time, save_known
+from main import Config, earlier_slots, filter_by_day_and_date, load_known, notify_ntfy, parse_slot_time, save_known
 
 
 @pytest.fixture
@@ -136,6 +137,33 @@ class TestLoadSaveKnown:
             save_known(path, {"slot1", "slot2", "slot3"})
             assert load_known(path) == {"slot1", "slot2", "slot3"}
             assert json.loads(path.read_text()) == ["slot1", "slot2", "slot3"]
+
+
+class TestNotifyNtfy:
+    def test_notify_success(self, config):
+        with patch("main.requests.post") as mock_post:
+            mock_post.return_value.status_code = 200
+            notify_ntfy(config, "Test Title", "Test body")
+            mock_post.assert_called_once()
+            call_args = mock_post.call_args
+            assert call_args[0][0] == f"https://ntfy.sh/{config.ntfy_topic}"
+            assert call_args[1]["headers"]["Title"] == "Test Title"
+            assert call_args[1]["data"] == b"Test body"
+            assert call_args[1]["headers"]["Priority"] == "high"
+
+    def test_notify_http_error(self, config):
+        with patch("main.requests.post") as mock_post:
+            mock_post.return_value.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
+            with pytest.raises(requests.HTTPError):
+                notify_ntfy(config, "Test", "Body")
+
+    def test_notify_with_multiline_body(self, config):
+        with patch("main.requests.post") as mock_post:
+            mock_post.return_value.status_code = 200
+            body = "2026-05-01T09:00\n2026-05-02T14:00\n2026-05-03T11:00"
+            notify_ntfy(config, "Slots", body)
+            call_args = mock_post.call_args
+            assert call_args[1]["data"] == body.encode("utf-8")
 
 
 class TestSlotDeduplication:
