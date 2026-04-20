@@ -25,10 +25,7 @@ log = logging.getLogger("nexus")
 class Config:
     location_id: int
     current_appt: datetime
-    twilio_sid: str
-    twilio_token: str
-    twilio_from: str
-    twilio_to: str
+    ntfy_topic: str
     poll_interval_s: int
     state_path: Path
     allowed_weekdays: set[int]
@@ -60,10 +57,7 @@ def load_config() -> Config:
     return Config(
         location_id=int(os.environ["LOCATION_ID"]),
         current_appt=current_appt,
-        twilio_sid=os.environ["TWILIO_ACCOUNT_SID"],
-        twilio_token=os.environ["TWILIO_AUTH_TOKEN"],
-        twilio_from=os.environ["TWILIO_FROM"],
-        twilio_to=os.environ["TWILIO_TO"],
+        ntfy_topic=os.environ["NTFY_TOPIC"],
         poll_interval_s=int(os.environ.get("POLL_INTERVAL_S", "120")),
         state_path=Path(os.environ.get("STATE_PATH", "state.json")),
         allowed_weekdays=allowed_weekdays,
@@ -130,11 +124,11 @@ def save_known(path: Path, known: set[str]) -> None:
     path.write_text(json.dumps(sorted(known)))
 
 
-def notify_sms(cfg: Config, body: str) -> None:
+def notify_ntfy(cfg: Config, title: str, body: str) -> None:
     r = requests.post(
-        f"https://api.twilio.com/2010-04-01/Accounts/{cfg.twilio_sid}/Messages.json",
-        auth=(cfg.twilio_sid, cfg.twilio_token),
-        data={"From": cfg.twilio_from, "To": cfg.twilio_to, "Body": body},
+        f"https://ntfy.sh/{cfg.ntfy_topic}",
+        headers={"Title": title, "Priority": "high"},
+        data=body.encode("utf-8"),
         timeout=10,
     )
     r.raise_for_status()
@@ -152,9 +146,8 @@ def run_poll(cfg: Config) -> None:
             if new_keys:
                 new_sorted = sorted(new_keys)
                 log.info("Found %d new earlier slot(s): %s", len(new_sorted), new_sorted)
-                preview = ", ".join(new_sorted[:3]) + (f" (+{len(new_sorted) - 3} more)" if len(new_sorted) > 3 else "")
-                body = f"NEXUS slot open: {preview}. Book: https://ttp.cbp.dhs.gov/schedulerui/"
-                notify_sms(cfg, body)
+                body = "\n".join(new_sorted)
+                notify_ntfy(cfg, "NEXUS slot available", body + "\n\nBook: https://ttp.cbp.dhs.gov/schedulerui/")
                 known |= new_keys
                 save_known(cfg.state_path, known)
             else:

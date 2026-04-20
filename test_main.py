@@ -16,10 +16,7 @@ def config():
     return Config(
         location_id=5020,
         current_appt=datetime(2026, 6, 8, 9, 0, tzinfo=timezone.utc),
-        twilio_sid="test_sid",
-        twilio_token="test_token",
-        twilio_from="+15551234567",
-        twilio_to="+15559876543",
+        ntfy_topic="test-topic",
         poll_interval_s=120,
         state_path=Path("state.json"),
         allowed_weekdays={1, 2, 3, 4, 5, 6, 7},
