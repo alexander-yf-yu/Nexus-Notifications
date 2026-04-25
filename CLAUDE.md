@@ -16,7 +16,8 @@ Docker:
 
 - Build + run in background: `docker compose up -d --build`
 - Tail logs: `docker compose logs -f`
-- State persists to `./data/state.json` on the host (mounted to `/data` in the container).
+- Restart after code or Dockerfile changes: `docker compose up -d --build` (rebuilds + recreates only what changed). Bounce without rebuilding: `docker compose restart`. Full reset: `docker compose down && docker compose up -d --build`.
+- State persists to `./data/state.json` on the host (mounted to `/data` in the container) and survives all of the above.
 
 ## Architecture
 
